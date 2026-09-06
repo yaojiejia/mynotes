@@ -1,0 +1,4 @@
+# Obsidian per-session UI state (open panes, layout, sidebar widths).
+# Rewritten constantly, conflicts on every sync, carries no note content.
+# Real config (app.json, appearance.json, core-plugins.json) stays tracked.
+**/.obsidian/workspace*.json
