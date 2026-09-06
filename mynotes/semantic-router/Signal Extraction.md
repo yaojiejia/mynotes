@@ -188,6 +188,57 @@ Cosine similarity against a set of text anchors you write out longhand:
 
 That is a good instinct, and it is the failure mode to watch for across this whole layer. Signals fail quietly by design, since one broken classifier should not take down routing. The cost is that a misconfigured guardrail looks exactly like a working one.
 
+## Worked example
+
+Same request used across [[Overview]], [[Decision Engine]] and [[Plugin Chain]]:
+
+> `urgent: our production API is timing out, help me debug this`
+
+Against the shipped `config/config.yaml`, here is what this layer actually does.
+
+**Runs, and matches:**
+
+```
+keyword:urgent_keywords   ✅  ngram, arity 3, threshold 0.4   → "urgent"
+keyword:code_keywords     ✅  bm25, threshold 0.1             → "debug"
+domain                    →   "computer science"              ModernBERT
+```
+
+**Runs, and does not match.** This still costs you the forward pass:
+
+```
+jailbreak:prompt_injection  ✗  contrastive, threshold 0.8
+keyword:machine_learning    ✗  bm25, no ML terms present
+```
+
+That jailbreak evaluation is not wasted work even though it found nothing, because `safe_only_svm_route` is written as `NOT[jailbreak:prompt_injection]`. **A negative result is a positive input to a rule.**
+
+**Skipped entirely.** Not because they failed, but because the two gates said no:
+
+| signal | why skipped |
+|---|---|
+| `pii` | gate 2, ready is false unless `PIIRules` exist and PII is enabled |
+| `modality` | gate 2, needs `ModalityRules` plus the detector switched on |
+| `kb`, `event`, `metadata` | gate 1, no active decision references them |
+
+Every one of those skips removes a forward pass from the critical path.
+
+### What this costs
+
+The signal result handed upward is just a bag of strings and floats:
+
+```
+SignalConfidences {
+  "keyword:urgent_keywords": 1.0,   ← structural, keyword reports no degree
+  "keyword:code_keywords":   1.0,   ← structural
+  "domain:computer science": 0.91,  ← real, reported by the classifier
+}
+```
+
+Note the mix. Two of those 1.0 values are placeholders standing in for "matched, no opinion on how strongly," and one is a genuine score. That distinction is invisible here but decides how ranking behaves one layer up, which is the `ConfidenceScored` story in [[Decision Engine]].
+
+Wall clock is set by the domain classifier, the only ML signal on this path, so roughly 50 to 60 ms by the paper's table. The two keyword signals contribute microseconds. **Had this config referenced no learned signals at all, routing would have cost essentially nothing.**
+
 ## Latency, honestly
 
 The paper's table puts heuristic signals under a millisecond and ML signals between 15 and 120 ms, with parallel evaluation meaning you pay the slowest rather than the sum. The conclusion of the same paper claims "sub 10 ms signal extraction latency," which cannot be describing the same thing. Nothing in the code resolves this, since these are measurements rather than constants. Assume the table.

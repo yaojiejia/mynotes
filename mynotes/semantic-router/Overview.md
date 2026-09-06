@@ -97,6 +97,45 @@ The whole engine costs **under 0.5 ms even at 100 decisions with 5 conditions ea
 
 Pre routing plugins run before any model is called: safety blocks, semantic cache lookup, RAG injection, memory retrieval, system prompt augmentation, provider auth headers. Then a selection algorithm picks from the decision's pool. Post routing plugins run on the response: hallucination checks, cache writes, format translation.
 
+## One request, end to end
+
+Everything above is abstract, so here is a real one. All names, thresholds and priorities below come from the shipped `config/config.yaml`, not from an invented example.
+
+**The request:**
+
+```json
+{"model": "auto", "messages": [
+  {"role": "user", "content": "urgent: our production API is timing out, help me debug this"}
+]}
+```
+
+**Step 1, signals.** Several run in parallel, most needing no model at all:
+
+| signal | result | how |
+|---|---|---|
+| `keyword:urgent_keywords` | ✅ match | n gram, "urgent" clears 0.4 |
+| `keyword:code_keywords` | ✅ match | BM25, "debug" clears 0.1 |
+| `domain` | `computer science` | ModernBERT classifier |
+| `jailbreak:prompt_injection` | ✗ no match | contrastive, under 0.8 |
+
+**Step 2, decisions.** Three are worth watching. Two match, one misses:
+
+| decision | priority | rule | result |
+|---|---|---|---|
+| `urgent_automix_route` | 145 | `AND[keyword:urgent_keywords]` | ✅ |
+| `safe_hybrid_route` | 140 | `AND[domain:business, OR[...], NOT[jailbreak]]` | ✗ |
+| `safe_only_svm_route` | 110 | `NOT[jailbreak:prompt_injection]` | ✅ |
+
+`safe_hybrid_route` is the interesting one. Its urgent condition matched fine, but the AND also demands `domain: business` and this query classified as computer science, so the whole branch collapses. **A decision fails on its strictest condition, not its most relevant one.**
+
+Of the two survivors, priority picks the winner: **145 beats 110**, so `urgent_automix_route` takes it.
+
+**Step 3, plugins and model.** That decision carries a two model pool, `qwen3-8b` and `qwen3-32b`, and the `automix` algorithm. AutoMix tries the cheap model first and escalates only if verification comes in under 0.78, capped at 2 escalations. On the way back, its `response_jailbreak` plugin checks the model's own output at threshold 0.85.
+
+**So: the BERT classifier said "computer science." It never named a model.** The routing came from your YAML. That separation is the whole design, and it is why "PII never leaves the building" is expressible here as a guarantee rather than a hope.
+
+Each layer of this walkthrough is expanded on its own page: [[Signal Extraction]], [[Decision Engine]], [[Plugin Chain]].
+
 ## How it actually plugs in
 
 It runs as an **Envoy External Processor**, a gRPC service Envoy calls at four points in the request lifecycle.

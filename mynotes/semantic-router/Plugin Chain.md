@@ -149,6 +149,67 @@ Each entry also declares an execution path:
 
 That distinction is a cost signal. **A looper algorithm can call models more than once per request**, which is obvious for ReMoM but easy to miss for `confidence` and `ratings`.
 
+## Worked example
+
+Finishing the request from [[Overview]], [[Signal Extraction]] and [[Decision Engine]]. `urgent_automix_route` won, and this is its full plugin and algorithm config, verbatim:
+
+```yaml
+modelRefs:
+  - model: qwen3-8b
+    use_reasoning: false
+  - model: qwen3-32b
+    use_reasoning: true
+algorithm:
+  type: automix
+  automix:
+    verification_threshold: 0.78
+    max_escalations: 2
+    cost_aware_routing: true
+    cost_quality_tradeoff: 0.35
+    use_logprob_verification: true
+plugins:
+  - type: response_jailbreak
+    configuration:
+      enabled: true
+      threshold: 0.85
+      action: header
+```
+
+Walking the chain in the order the code runs it:
+
+| step | what happens here |
+|---|---|
+| 4. decision evaluation | winner picked, **and AutoMix picks `qwen3-8b`** |
+| 6. `fast_response` | not configured, skipped |
+| 7. rate limit | passes |
+| 8. `response_cache` | not configured on this decision, no lookup |
+| 9. RAG | not configured, skipped |
+| 11. memory | not configured, skipped |
+| 12. context compression | not configured, skipped |
+| dispatch | request goes to `qwen3-8b` |
+
+Notice how little runs. **A decision only pays for the plugins it declares**, and this one declares exactly one, on the response side.
+
+### The escalation, which is easy to miss
+
+AutoMix sends `qwen3-8b` first. If verification comes back under `0.78`, it escalates to `qwen3-32b`, up to `max_escalations: 2`. So this single client request can become **two or three upstream model calls**, and the client never learns that.
+
+This is the cost trap worth internalizing. The [[Decision Engine]] chose a decision in well under a millisecond, [[Signal Extraction]] cost roughly one classifier forward pass, and then the algorithm quietly made the expensive choice. Also note `automix` is tiered **experimental** in the catalog, despite the paper recommending it for cost optimized deployments.
+
+### On the way back
+
+```
+updateResponseCache          → skipped, no cache on this decision
+response_jailbreak @ 0.85    → action: header
+hallucination                → not configured
+memory store                 → not configured
+warnings header              → set if the jailbreak code fired
+```
+
+`action: header` is the softest of the available responses. The reply still reaches the client, with a warning code attached to the response headers rather than being blocked. That is a reasonable choice for an urgent operational query, where a false positive that swallows the answer costs more than the risk it guards against.
+
+It also sidesteps the cache ordering issue described above, since nothing was cached on this route. **A decision that had enabled `response_cache` alongside `response_jailbreak` would have written the response before checking it.**
+
 ## Plugins are per decision, and that is the point
 
 The same plugin behaves differently on different routes because the config lives on the decision:

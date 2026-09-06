@@ -187,6 +187,99 @@ func isCatchAllRules(rules config.RuleCombination) bool {
 
 Omitted rules, or an explicit empty AND. Both mean "always match", and both get pushed behind any signal backed decision under tiered and confidence selection. Under plain priority selection catch all is **not** special cased, so a catch all with a high priority number will beat real matches. Worth knowing before you set one to 999.
 
+## Worked example
+
+Carrying on from [[Signal Extraction]], with the same request:
+
+> `urgent: our production API is timing out, help me debug this`
+
+Signals arriving into this layer:
+
+```
+keyword:urgent_keywords    matched, confidence 1.0 (structural)
+keyword:code_keywords      matched, confidence 1.0 (structural)
+domain:computer science    matched, confidence 0.91 (reported)
+jailbreak:prompt_injection not matched
+```
+
+Three real decisions from the shipped config compete.
+
+**`urgent_automix_route`**, priority 145:
+
+```yaml
+rules:
+  operator: AND
+  conditions:
+    - type: keyword
+      name: urgent_keywords
+```
+
+One condition, matched. AND over one matched child gives mean confidence `1.0`. **State: true.** But `scored` is false, because that 1.0 was structural rather than reported.
+
+**`safe_hybrid_route`**, priority 140, the near miss and the reason it is worth showing:
+
+```yaml
+rules:
+  operator: AND
+  conditions:
+    - type: domain
+      name: business              # ← computer science, so FALSE
+    - operator: OR
+      conditions:
+        - type: keyword
+          name: urgent_keywords   # would have matched
+        - type: complexity
+          name: needs_reasoning:hard
+    - operator: NOT
+      conditions:
+        - type: jailbreak
+          name: prompt_injection  # would have been TRUE
+```
+
+Two of its three branches would have passed. It fails anyway, because `evalAND` returns the moment a child is false and not on error:
+
+```go
+case evaluationFalse:
+    if !childEvaluation.onError {
+        evaluation = nodeEvaluation{state: evaluationFalse}
+        trace.finish(evaluation)
+        return evaluation, trace
+    }
+```
+
+**AND short circuits on the first genuine false.** The OR and NOT branches are never even evaluated. Worth remembering when you are reading a trace and wondering why a condition shows no result: it may simply never have run.
+
+**`safe_only_svm_route`**, priority 110:
+
+```yaml
+rules:
+  operator: NOT
+  conditions:
+    - type: jailbreak
+      name: prompt_injection
+```
+
+The child is false, so NOT inverts it to true with the constant confidence `1.0`. **State: true.** A decision that matched because nothing bad was detected.
+
+### Picking the winner
+
+```
+matched: urgent_automix_route (p145, conf 1.0, scored=false)
+         safe_only_svm_route  (p110, conf 1.0, scored=false)
+```
+
+No matched decision carries a tier, so tiered selection stays off. The global config sets `strategy: priority`. So:
+
+```go
+if left.Decision.Priority != right.Decision.Priority {
+    return left.Decision.Priority > right.Decision.Priority   // 145 > 110
+}
+```
+
+**`urgent_automix_route` wins on priority alone.** Confidence never entered into it, and here that is doubly true: both decisions are `scored: false`, so the pool is not confidence comparable anyway. Switching the global strategy to `confidence` would change **nothing** for this request. Both would still tie at a structural 1.0 and fall through to the same priority comparison.
+
+To make confidence actually decide something here, a competing decision would need a condition on a signal that reports a real score, such as `domain` at 0.91 or an embedding rule. That is the practical shape of the `ConfidenceScored` rule: **confidence selection only does work when your conditions are built on signals that have opinions about degree.**
+
 ## Domain is not a plain string match
 
 Every other signal type does `slices.Contains(rules, name)`. Domain gets `matchesDomainCondition`, which matches directly *or* through the category's `mmlu_categories` list. So a condition on `business` also fires when the classifier detected any MMLU category mapped under business. Convenient, and worth remembering when a domain condition matches something you did not expect.
