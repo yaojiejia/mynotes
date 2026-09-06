@@ -4,17 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "0237f8d311f882b5",
+        "id": "566209274b9e674c",
         "type": "tabs",
         "children": [
           {
-            "id": "58ff788ded368d9f",
+            "id": "ed31f4f1c640e5a2",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "cs336/2. Resource Accounting.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "2. Resource Accounting"
             }
           }
         ]
@@ -79,7 +83,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 200
   },
   "right": {
     "id": "93a659661f71dd5f",
@@ -155,7 +159,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "2026-08-24.md",
+                "file": "create a link.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -184,6 +188,36 @@
   },
   "active": "879f279d3e8e1e71",
   "lastOpenFiles": [
+    "cs336/attachments/cs336_l3_rope_code.png",
+    "cs336/attachments/cs336_l3_prenorm_convergence.png",
+    "cs336/attachments/cs336_l3_mqa.png",
+    "cs336/attachments/cs336_l3_model_table.png",
+    "cs336/attachments/cs336_l3_loss_spikes.png",
+    "cs336/attachments/cs336_l3_gradient_attenuation.png",
+    "cs336/attachments/cs336_l2_roofline.webp",
+    "cs336/attachments/cs336_l2_fp8_formats.png",
+    "cs336/attachments/cs336_l2_fp32.png",
+    "cs336/attachments/cs336_l2_fp16.png",
+    "cs336/attachments/cs336_l2_deep_network.png",
+    "cs336/attachments",
+    "cs336/2. Resource Accounting.md.tmp.7536.85d998f70e99",
+    "cs336/1. Tokenization.md.tmp.7536.a4595b06af74",
+    "ai-sys-papers/Cross-Model KV Cache Transfer in LLM Families.pdf",
+    "ai-sys-papers/Unconfirmed 9637.crdownload",
+    "cs336/3. Architectures.md",
+    "cs336/2. Resource Accounting.md",
+    "cs336/1. Tokenization.md",
+    "cs336/Transcripts/Stanford CS336 Language Modeling from Scratch  Spring 2026  Lecture 1 Overview, Tokenization.md",
+    "cs336/Transcripts/Stanford CS336 Language Modeling from Scratch  Spring 2026  Lecture 3 Architectures.md",
+    "cs336/Transcripts/Stanford CS336 Language Modeling from Scratch  Spring 2026  Lecture 2 PyTorch (einops).md",
+    "cs336/Transcripts",
+    "ai-sys-papers",
+    "Clippings",
+    "cs336/3. Architectures.md.tmp.7536.445f8822e5c3",
+    "cs336/3. Architectures.md.tmp.7536.9e45c67480f6",
+    "3. Architectures.md",
+    "cs336/2. PyTorch.md",
+    "1. Tokenization.md",
     "2026-08-24.md",
     "Welcome.md",
     "create a link.md"
